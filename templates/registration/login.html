@@ -1,0 +1,38 @@
+{% extends 'layout.html' %}
+{% block title %}Login{% endblock %}
+
+{# Hide TMDB indicator on the login page #}
+{% block tmdb_indicator %}{% endblock %}
+
+{% block body %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-head">
+      <div class="brand-badge">
+        <span class="brand-icon">🔐</span>
+        <div>
+          <small style="opacity:.9; display:block;">Welcome back</small>
+          <h4>Log in to your account</h4>
+        </div>
+      </div>
+    </div>
+
+    <div class="auth-body">
+      <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="auth-actions mt-3">
+          <button class="btn btn-primary w-100 py-2" type="submit">Log in</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="auth-footer">
+      <p class="mb-0 text-center">
+        New here?
+        <a href="{% url 'signup' %}">Create an account</a>
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+.eggs/
+*.log
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Django
+db.sqlite3
+media/
+staticfiles/
+collectstatic/
+*.sqlite3
+
+# Environment/Secrets
+.env
+.env.*
+*.env
+
+# Model artifacts (optional, if you don’t want to commit trained models)
+models/*.pkl
+
+# Coverage / Test
+.coverage
+htmlcov/
+pytest_cache/
+
+# Node (if used)
+node_modules/

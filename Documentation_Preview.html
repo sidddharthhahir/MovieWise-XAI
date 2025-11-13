@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MovieWise XAI Codebase Documentation</title>
+    <style>
+        body { font-family: 'Times New Roman', serif; line-height: 1.6; margin: 40px; color: #333; background-color: #fff; }
+        h1, h2, h3, h4, h5, h6 { font-family: 'Times New Roman', serif; margin-top: 1.5em; margin-bottom: 0.8em; }
+        h1 { font-size: 2.2em; text-align: center; }
+        h2 { font-size: 1.8em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
+        h3 { font-size: 1.4em; }
+        h4 { font-size: 1.2em; }
+        p { margin-bottom: 1em; }
+        ul { list-style-type: disc; margin-left: 20px; margin-bottom: 1em; }
+        ol { list-style-type: decimal; margin-left: 20px; margin-bottom: 1em; }
+        li { margin-bottom: 0.5em; }
+        pre { background-color: #f4f4f4; border: 1px solid #ddd; padding: 10px; border-radius: 4px; overflow-x: auto; font-family: 'Courier New', monospace; margin-bottom: 1em; }
+        code { font-family: 'Courier New', monospace; background-color: #f4f4f4; padding: 2px 4px; border-radius: 3px; }
+        .section { margin-bottom: 2em; }
+        .subsection { margin-left: 20px; margin-bottom: 1.5em; }
+        .subsubsection { margin-left: 40px; margin-bottom: 1em; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 1em; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+
+    <h1>MovieWise XAI Codebase Documentation</h1>
+
+    <div class="section">
+        <h2>1. Introduction</h2>
+        <p>This document provides an in-depth, LaTeX-style technical documentation of the MovieWise XAI codebase. It details the architecture, component functionalities, design choices, and implementation specifics of the Django-based movie recommendation system. The aim is to offer a comprehensive understanding of how personalized recommendations, explainable AI, and dynamic content delivery are achieved.</p>
+    </div>
+
+    <div class="section">
+        <h2>2. Project Overview</h2>
+        <div class="subsection">
+            <h3>2.1. Technology Stack</h3>
+            <ul>
+                <li><strong>Backend:</strong> Python 3.9+, Django 5.0+, Django REST Framework (DRF) for API development, Django Channels for potential future real-time features.</li>
+                <li><strong>Database:</strong> SQLite (<code>db.sqlite3</code>) for development, easily configurable for PostgreSQL/MySQL in production.</li>
+                <li><strong>Frontend:</strong> HTML5, CSS3 (custom <code>app.css</code> for theming), Vanilla JavaScript (<code>app.js</code> for interactivity), Bootstrap 5 for responsive design and UI components.</li>
+                <li><strong>Machine Learning:</strong> LightFM for hybrid collaborative filtering, scikit-learn for TF-IDF vectorization and cosine similarity (used in content-based fallback and RAG).</li>
+                <li><strong>Explainable AI (XAI):</strong> OpenRouter API (Llama 3.3 70B) for natural language generation, integrated with custom RAG (Retrieval-Augmented Generation) for grounded explanations.</li>
+                <li><strong>External API:</strong> The Movie Database (TMDB) API for movie metadata, posters, and real-time trending data.</li>
+                <li><strong>Environment Management:</strong> Conda for isolated and reproducible development environments (<code>environment.yml</code>).</li>
+            </ul>
+        </div>
+        <div class="subsection">
+            <h3>2.2. Core Functionality</h3>
+            <p>MovieWise XAI delivers the following key functionalities:</p>
+            <ul>
+                <li><strong>Personalized Recommendations:</strong> Utilizes LightFM to generate "For You" movie lists tailored to individual user preferences based on their rating history.</li>
+                <li><strong>Explainable AI:</strong> Provides concise, natural language explanations (approximately 40 words) for why a specific movie is recommended, powered by an LLM.</li>
+                <li><strong>Real-time Trending:</strong> Dynamically fetches and displays the latest trending movies directly from TMDB.</li>
+                <li><strong>Interactive User Rating:</strong> Allows users to rate any movie using an intuitive 5-star system, with immediate visual feedback.</li>
+                <li><strong>Guided Onboarding:</strong> A structured process for new users to rate initial movies, enabling the recommendation engine to learn their preferences.</li>
+                <li><strong>Robust Search & Discovery:</strong> Comprehensive search capabilities by actor, genre, or language, leveraging TMDB data.</li>
+                <li><strong>Trailer Access:</strong> Provides direct links to YouTube search results for movie trailers for convenience.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>3. Project Structure</h2>
+        <p>The project follows a modular Django application structure, promoting separation of concerns and maintainability.</p>
+        <pre>
+<code>xai_recs_full_v3_2_auth_ui/</code>
+├── <code>.env</code>                      # Environment variables for configuration (e.g., API keys, DEBUG mode).
+├── <code>manage.py</code>                 # Django's command-line utility for administrative tasks.
+├── <code>project/</code>                  # Main Django project configuration.
+│   ├── <code>settings.py</code>           # Core Django settings, including installed apps, middleware, and custom configurations.
+│   ├── <code>urls.py</code>               # Main URL dispatcher, routing requests to different app-specific URL configurations.
+│   └── <code>asgi.py</code>               # ASGI configuration for deploying with an ASGI server, includes Channels routing.
+├── <code>accounts/</code>                 # Handles user authentication, registration, and session management.
+│   ├── <code>forms.py</code>              # Custom signup form extending Django's UserCreationForm.
+│   ├── <code>views.py</code>              # Views for user registration and custom logout logic.
+│   └── <code>urls.py</code>               # URL patterns for user accounts (e.g., signup).
+├── <code>core/</code>                     # Contains core application data models and utility services.
+│   ├── <code>models.py</code>             # Defines <code>Movie</code>, <code>Rating</code>, and <code>UserOnboarding</code> database models.
+│   ├── <code>admin.py</code>              # Registers core models with the Django admin interface.
+│   └── <code>services.py</code>           # Integrates external services, specifically the OpenRouter LLM API.
+├── <code>recs/</code>                     # Implements the movie recommendation logic and associated APIs.
+│   ├── <code>api_urls.py</code>           # Defines API endpoints for recommendations, ratings, explanations, and trending movies.
+│   ├── <code>lightfm_pipeline.py</code>   # Contains the LightFM model training, loading, prediction, and fallback logic.
+│   ├── <code>serializers.py</code>        # Django REST Framework serializers for <code>Movie</code> and <code>Rating</code> models.
+│   ├── <code>tmdb.py</code>               # Client for interacting with The Movie Database (TMDB) API.
+│   └── <code>views.py</code>              # Implements API view functions for all recommendation-related operations.
+├── <code>rag/</code>                      # Implements Retrieval-Augmented Generation features.
+│   ├── <code>embeddings.py</code>         # Manages TF-IDF vectorization and NearestNeighbors search for movie content.
+│   ├── <code>views.py</code>              # API view for RAG-based question answering.
+│   └── <code>api_urls.py</code>           # URL patterns for RAG-specific API endpoints.
+├── <code>ui/</code>                       # Manages the main user interface pages and their routing.
+│   ├── <code>views.py</code>              # Views for the main application page and the onboarding process.
+│   └── <code>urls.py</code>               # URL patterns for UI-specific pages (e.g., homepage, onboarding).
+├── <code>static/</code>                   # Static assets served directly to the client.
+│   ├── <code>app.css</code>               # Custom CSS for styling, including theme management (light/dark mode).
+│   └── <code>app.js</code>                # Frontend JavaScript for dynamic behavior, API calls, and UI interactions.
+└── <code>templates/</code>                # Django HTML templates.
+    ├── <code>app.html</code>              # The main single-page application template.
+    ├── <code>layout.html</code>           # Base template inherited by other HTML files.
+    ├── <code>onboarding.html</code>       # Dedicated template for the new user onboarding process.
+    └── <code>registration/</code>         # Templates for Django's built-in authentication views (login, signup).
+</pre>
+    </div>
+
+    <div class="section">
+        <h2>4. Detailed Component Analysis</h2>
+
+        <div class="subsection">
+            <h3>4.1. Core Application Models (<code>core/models.py</code>)</h3>
+            <p>The <code>core</code> app defines the foundational data structures for the MovieWise XAI system.</p>
+            <ul>
+                <li><strong><code>Movie</code> Model:</strong>
+                    <p>Represents a movie entry in the local database. It stores essential metadata, primarily sourced from TMDB.</p>
+<pre><code>
+class Movie(models.Model):
+    tmdb_id = models.IntegerField(unique=True, null=True, blank=True)
+    title = models.CharField(max_length=255)
+    overview = models.TextField(blank=True)
+    year = models.CharField(max_length=4, blank=True)
+    poster = models.URLField(blank=True)
+    popularity = models.FloatField(default=0)
+    vote = models.FloatField(default=0)
+    def __str__(self): return self.title
+</code></pre>
+                    <p><code>tmdb_id</code> is crucial for linking local movie entries to their TMDB counterparts, facilitating data retrieval and updates.</p>
+                </li>
+                <li><strong><code>Rating</code> Model:</strong>
+                    <p>Captures a user's explicit preference for a movie, forming the basis for personalized recommendations.</p>
+<pre><code>
+class Rating(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    movie = models.ForeignKey(Movie, on_delete=models.CASCADE)
+    value = models.IntegerField(default=5) # Rating from 1 to 5 stars
+    created_at = models.DateTimeField(auto_now_add=True)
+</code></pre>
+                    <p>Ratings are tied to authenticated <code>User</code> instances. While <code>null=True, blank=True</code> is set for <code>user</code>, the application's design ensures ratings are typically made by authenticated users.</p>
+                </li>
+                <li><strong><code>UserOnboarding</code> Model:</strong>
+                    <p>A specialized model to track the progress of new users through the onboarding process, ensuring they provide sufficient initial ratings before accessing personalized features.</p>
+<pre><code>
+class UserOnboarding(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='onboarding')
+    completed = models.BooleanField(default=False)
+    ratings_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    def __str__(self): return f"Onboarding for {self.user.username}"
+</code></pre>
+                    <p>This model is critical for managing the cold-start problem in recommendation systems by gating access to personalized content until a user has provided enough feedback.</p>
+                </li>
+            </ul>
+        </div>
+
+        <div class="subsection">
+            <h3>4.2. Recommendation Engine (<code>recs/lightfm_pipeline.py</code>)</h3>
+            <p>This module is the heart of the recommendation system, integrating LightFM and providing robust fallback mechanisms.</p>
+            <ul>
+                <li><strong>LightFM Model Training (<code>train_and_save</code>):</strong>
+                    <p>This function orchestrates the training of the LightFM model. It gathers user and item data, builds an interaction matrix, and fits the model.</p>
+<pre><code>
+def train_and_save(epochs=8):
+    try:
+        from lightfm import LightFM
+        from lightfm.data import Dataset
+        # ... (logging and data preparation) ...
+        ds = Dataset()
+        ds.fit(users, items)
+        # ... (build interaction matrix from Ratings or popularity) ...
+        model = LightFM(loss='warp')
+        model.fit(mat, epochs=epochs, num_threads=2)
+        joblib.dump({'model':model, 'items':items, 'mode':'lightfm'}, ART)
+        return ART
+    except Exception as e:
+        # ... (error logging) ...
+        return _train_fallback()
+</code></pre>
+                    <p>The model is trained using a 'warp' loss function, suitable for implicit feedback (which can be derived from explicit ratings). It saves the trained model and item mapping using <code>joblib</code>.</p>
+                </li>
+                <li><strong>Recommendation Generation (<code>topn_for_user</code>):</strong>
+                    <p>This is the primary function for fetching personalized recommendations for a user, implementing a multi-tiered strategy for robustness.</p>
+<pre><code>
+def topn_for_user(user_id=1, k=12):
+    artifacts = load_artifacts()
+    mode = artifacts.get('mode', 'fallback')
+    
+    if mode == 'lightfm' and artifacts.get('model') is not None:
+        # Primary: Use LightFM predictions
+        # ... (prediction logic using model.predict) ...
+        return movies
+    elif mode == 'fallback' and artifacts.get('model') is not None:
+        # Fallback 1: Use popularity-based scores from _train_fallback
+        # ... (sorting by fallback scores) ...
+        return movies
+    # Fallback 2: Content-based approach
+    return content_based_recommendations(user_id, k)
+</code></pre>
+                    <p>It first attempts to use the trained LightFM model. If LightFM fails or is not yet trained, it falls back to a popularity-based model, and then to a content-based recommendation system.</p>
+                </li>
+                <li><strong>Content-Based Fallback (<code>content_based_recommendations</code>):</strong>
+                    <p>A robust fallback that generates recommendations based on movie content similarity and user's past high ratings. This is crucial for cold-start scenarios or when LightFM data is sparse.</p>
+<pre><code>
+def content_based_recommendations(user_id, k=12):
+    # ... (fetches all movies and user ratings) ...
+    vectorizer = TfidfVectorizer(max_features=5000, stop_words='english', ngram_range=(1, 2))
+    tfidf_matrix = vectorizer.fit_transform(movie_texts)
+    # ... (calculates similarity with preferred movies using cosine_similarity) ...
+    return sorted_movies[:k]
+</code></pre>
+                    <p>It leverages TF-IDF to vectorize movie titles and overviews, then uses cosine similarity to find movies similar to those the user has positively rated.</p>
+                </li>
+            </ul>
+        </div>
+
+        <div class="subsection">
+            <h3>4.3. Explainable AI (XAI) Implementation</h3>
+            <p>The system provides concise, natural language explanations for recommendations, enhancing user trust and understanding.</p>
+            <div class="subsubsection">
+                <h4>4.3.1. LLM-Powered Explanations (<code>core/services.py</code>, <code>recs/views.py</code>)</h4>
+                <ul>
+                    <li><strong><code>OpenRouterService</code> (<code>core/services.py</code>):</strong>
+                        <p>Manages the interaction with the OpenRouter API for the Llama 3.3 70B LLM. It constructs a context-rich prompt and handles the API call.</p>
+<pre><code>
+class OpenRouterService:
+    # ... (API key, base_url, model configuration) ...
+    def generate_explanation(self, user_context, movie_context):
+        prompt = f"""
+        # ... (detailed prompt instructions for LLM) ...
+        """
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": "# ... (system message) ..."},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": 60, # Adjusted for ~40 words
+            "temperature": 0.7
+        }
+        # ... (requests.post call, error handling) ...
+        # Post-processing to enforce exactly 40 words and graceful ending
+        # ...
+        return explanation
+</code></pre>
+                        <p>The prompt is carefully engineered to guide the LLM to generate explanations that are exactly 40 words, conversational, and end gracefully. A <code>max_tokens</code> of 60 is set to encourage this brevity, complemented by a robust post-processing step to trim the response to the desired length and ensure proper punctuation.</p>
+                    </li>
+                    <li><strong><code>natural_explanation()</code> API (<code>recs/views.py</code>):</strong>
+                        <p>This API endpoint orchestrates the generation of natural language explanations. It gathers all necessary context before calling the LLM.</p>
+<pre><code>
+@api_view(['GET'])
+def natural_explanation(request):
+    # ... (fetches movie info and user ratings) ...
+    # Builds comprehensive user_context and movie_context strings
+    # Tries LLM explanation first
+    try:
+        from core.services import openrouter_service
+        explanation = openrouter_service.generate_explanation(user_context, movie_context)
+        if explanation:
+            return Response({"movie": movie.title, "explanation": explanation, "type": "llm_generated"})
+    except Exception as e:
+        # ... (error logging) ...
+    
+    # Fallback to RAG explanation
+    # ...
+    
+    # Final fallback to simple explanation
+    # ...
+    return Response({"movie": movie.title, "explanation": simple_explanation, "type": "simple_fallback"})
+</code></pre>
+                        <p>It provides a robust, multi-tiered fallback system: first attempting an LLM explanation, then a RAG-based explanation, and finally a simple explanation based on TMDB data if the more advanced methods fail.</p>
+                    </li>
+                </ul>
+            </div>
+            <div class="subsubsection">
+                <h4>4.3.2. RAG Explanations (<code>rag/</code>)</h4>
+                <p>The RAG module supports both general content-based search and serves as a fallback for LLM explanations.</p>
+                <ul>
+                    <li><strong><code>embeddings.py</code>:</strong>
+                        <p>Manages the creation and storage of TF-IDF embeddings for movie content. This allows for semantic search capabilities.</p>
+<pre><code>
+class Store:
+    def __init__(self): self.vec = TfidfVectorizer(...)
+    def build(self): # ... (fits vectorizer and NearestNeighbors) ...
+    def search(self, q, k=5): # ... (transforms query and finds nearest neighbors) ...
+</code></pre>
+                        <p>The <code>Store</code> class builds a vector space model of movie overviews and titles, enabling efficient content-based retrieval.</p>
+                    </li>
+                    <li><strong><code>qa()</code> API (<code>rag/views.py</code>):</strong>
+                        <p>Provides a question-answering interface where users can ask about movie types, and the system retrieves relevant movie contexts.</p>
+<pre><code>
+@api_view(['GET'])
+def qa(request):
+    q = request.GET.get('q', '')
+    hits = store.search(q, k=5)
+    # ... (constructs answer from movie overviews) ...
+    return Response({"question": q, "answer": ans, "hits": [...]})
+</code></pre>
+                        <p>This endpoint demonstrates the core RAG functionality by finding movies semantically similar to a user's query and building a concise answer from their overviews.</p>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="subsection">
+            <h3>4.4. User Interface (UI) Management</h3>
+            <p>The frontend is built with Bootstrap 5 and Vanilla JavaScript, ensuring a responsive and interactive experience.</p>
+            <ul>
+                <li><strong>Dynamic Content Loading (<code>static/app.js</code>):</strong>
+                    <p>JavaScript functions like <code>loadForYou()</code>, <code>loadTrending()</code>, and <code>discover()</code> asynchronously fetch data from the backend APIs and dynamically populate the HTML grids with movie cards.</p>
+<pre><code>
+async function loadForYou() {
+    // ... (fetches recommendations) ...
+    data.forEach(m => forYouGrid.appendChild(card(m, true, userRatings[m.id] || 0)));
+    wireButtons(forYouGrid);
+}
+</code></pre>
+                    <p>The <code>card()</code> function is central to rendering individual movie cards, handling parameters for local/TMDB movies, user ratings, and "Why?" button visibility.</p>
+                </li>
+                <li><strong>Interactive Rating System (<code>static/app.js</code>):</strong>
+                    <p>Users can rate movies using a 5-star interactive UI. Ratings are immediately reflected on the card and sent to the backend.</p>
+<pre><code>
+function wireStarRating(container, movieId, currentRating) {
+    // ... (event listeners for mouseenter, mouseleave, click) ...
+    star.addEventListener('click', () => {
+        rateMovie(movieId, rating);
+        container.dataset.currentRating = rating; // Update current rating
+    });
+}
+</code></pre>
+                    <p>The system provides instant visual feedback and a confirmation modal, while actual model updates are deferred for performance.</p>
+                </li>
+                <li><strong>Theme Toggle (<code>static/app.js</code>, <code>templates/layout.html</code>):</strong>
+                    <p>Allows users to switch between light and dark modes. Uses CSS custom properties and Bootstrap Icon glyphs for a consistent look.</p>
+<pre><code>
+function updateThemeIcon(theme) {
+    themeIcon.classList.remove('bi-sun-fill', 'bi-moon-fill');
+    if (theme === 'dark') {
+        themeIcon.classList.add('bi-sun-fill');
+    } else {
+        themeIcon.classList.add('bi-moon-fill');
+    }
+}
+</code></pre>
+                    <p>The theme preference is saved in <code>localStorage</code> and respects system preferences.</p>
+                </li>
+                <li><strong>Search Results UI/UX (<code>static/app.js</code>, <code>templates/app.html</code>):</strong>
+                    <p>Search functionality now provides a "new section" experience. When a search is performed, the main homepage content is replaced with the search results.</p>
+<pre><code>
+async function discover() {
+    // ... (constructs search results HTML) ...
+    if (mainContent) {
+        mainContent.innerHTML = searchResultsHtml; // Replaces content
+    }
+    // ... (wires "Back to Home" button to restore homepageContent) ...
+}
+</code></pre>
+                    <p>A "Back to Home" button allows users to return to the original "For You" and "Trending" sections, which are then re-loaded dynamically.</p>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>5. API Endpoints</h2>
+        <p>The application exposes a set of RESTful API endpoints for backend-frontend communication, all prefixed with <code>/api/</code>.</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Endpoint</th>
+                    <th>Method</th>
+                    <th>Description</th>
+                    <th>Authentication</th>
+                    <th>Example Usage</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>/discover/</code></td>
+                    <td>GET</td>
+                    <td>Discovers movies from TMDB based on actor, genre, or language filters.</td>
+                    <td>Optional</td>
+                    <td><code>/api/discover/?genre=action&lang=en</code></td>
+                </tr>
+                <tr>
+                    <td><code>/ratings/</code></td>
+                    <td>POST</td>
+                    <td>Submits a user rating for a movie. Handles both local Movie IDs and TMDB IDs. If a TMDB ID is provided for a new movie, it's ingested.</td>
+                    <td>Required</td>
+                    <td><code>/api/ratings/</code> Body: <code>{"movie": "1025527", "value": 5}</code></td>
+                </tr>
+                <tr>
+                    <td><code>/recommendations/</code></td>
+                    <td>GET</td>
+                    <td>Returns personalized movie recommendations for the authenticated user, primarily from LightFM. Requires a minimum of 5 ratings for personalization.</td>
+                    <td>Required</td>
+                    <td><code>/api/recommendations/?k=12</code></td>
+                </tr>
+                <tr>
+                    <td><code>/trending/</code></td>
+                    <td>GET</td>
+                    <td>Fetches real-time trending movies directly from TMDB's <code>/trending</code> endpoint.</td>
+                    <td>Optional</td>
+                    <td><code>/api/trending/?k=12&time_window=day</code></td>
+                </tr>
+                <tr>
+                    <td><code>/explain/</code></td>
+                    <td>GET</td>
+                    <td>Provides a basic explanation for a movie based on its TMDB rating and popularity. This is a legacy endpoint, primarily superseded by <code>natural-explanation</code>.</td>
+                    <td>Optional</td>
+                    <td><code>/api/explain/?tmdb_id=1062722</code></td>
+                </tr>
+                <tr>
+                    <td><code>/natural-explanation/</code></td>
+                    <td>GET</td>
+                    <td>Generates a natural language explanation for a movie recommendation using an LLM (Llama 3.3 70B), with RAG and simple fallbacks. Explanation is ~40 words.</td>
+                    <td>Optional</td>
+                    <td><code>/api/natural-explanation/?movie_id=123</code></td>
+                </tr>
+                <tr>
+                    <td><code>/onboarding/complete/</code></td>
+                    <td>POST</td>
+                    <td>Marks the authenticated user's onboarding process as complete after initial ratings.</td>
+                    <td>Required</td>
+                    <td><code>/api/onboarding/complete/</code> Body: <code>{}</code></td>
+                </tr>
+                <tr>
+                    <td><code>/user-ratings/</code></td>
+                    <td>GET</td>
+                    <td>Fetches an authenticated user's ratings for a list of specified movies (by local ID or TMDB ID). Used to pre-fill star ratings on cards.</td>
+                    <td>Required</td>
+                    <td><code>/api/user-ratings/?movie_id=1&movie_id=2</code></td>
+                </tr>
+                <tr>
+                    <td><code>/rag/qa/</code></td>
+                    <td>GET</td>
+                    <td>Performs RAG-based question answering on movie content (titles and overviews).</td>
+                    <td>Optional</td>
+                    <td><code>/api/rag/qa/?q=sci-fi+movies+about+space</code></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <h2>6. Key User Flows</h2>
+
+        <div class="subsection">
+            <h3>6.1. User Onboarding Process</h3>
+            <ol>
+                <li><strong>Registration/Login:</strong> A new user creates an account and logs in.</li>
+                <li><strong>Onboarding Redirection:</strong> If the user's <code>UserOnboarding</code> record indicates incomplete status (or is missing), they are automatically redirected to the dedicated onboarding page (<code>/ui/onboarding/</code>).</li>
+                <li><strong>Preference Collection:</strong> On the onboarding page, the user is presented with movies categorized by genre. They are guided to rate at least 5 movies across these genres.</li>
+                <li><strong>Progress Tracking:</strong> A progress bar visually indicates how many movies the user has rated (e.g., 5/12).</li>
+                <li><strong>Completion:</strong> Once the minimum rating threshold (5 movies) is met, the "Complete Setup & Go to Recommendations" button becomes active. Clicking this marks the <code>UserOnboarding</code> record as complete via the <code>/api/onboarding/complete/</code> endpoint.</li>
+                <li><strong>Main App Access:</strong> The user is then redirected to the main application page (<code>/ui/app/</code>), where personalized recommendations become available.</li>
+            </ol>
+        </div>
+
+        <div class="subsection">
+            <h3>6.2. Personalized Recommendations (For You Section)</h3>
+            <ol>
+                <li><strong>Access:</strong> Accessible on the main application page (<code>/ui/app/</code>) in the "For You" section.</li>
+                <li><strong>LightFM Powered:</strong> Recommendations are primarily generated by the LightFM model, which learns from the user's rating history.</li>
+                <li><strong>Rating Threshold:</strong> If the user has not rated at least 5 movies, a special message with a progress bar is displayed, guiding them to rate more movies to unlock personalized recommendations.</li>
+                <li><strong>Explainability:</strong> Each recommended movie card features a "Why?" button. Clicking it triggers a call to <code>/api/natural-explanation/</code>, which returns a concise, LLM-generated explanation (approx. 40 words) for that specific recommendation.</li>
+            </ol>
+        </div>
+
+        <div class="subsection">
+            <h3>6.3. Movie Rating Across All Sections</h3>
+            <ol>
+                <li><strong>Interactive Stars:</strong> Every movie card in "For You", "Trending", and "Search Results" sections features an interactive 5-star rating system.</li>
+                <li><strong>Pre-filled Ratings:</strong> If a user has previously rated a movie, the stars are pre-filled, and the numerical rating (e.g., "4/5") is displayed next to the stars.</li>
+                <li><strong>Rating Submission:</strong> Clicking a star sends a POST request to <code>/api/ratings/</code>. This endpoint intelligently handles both local movie IDs and TMDB IDs, ingesting new movies into the local database if necessary.</li>
+                <li><strong>Instant UI Update:</strong> After a rating, the movie card's stars and numerical rating are immediately updated visually. A modal confirmation informs the user that their rating is noted and recommendations will update periodically.</li>
+                <li><strong>Model Feedback:</strong> New ratings are stored in the database, providing fresh data for the LightFM model during its next training cycle.</li>
+            </ol>
+        </div>
+
+        <div class="subsection">
+            <h3>6.4. Real-time Trending Movies</h3>
+            <ol>
+                <li><strong>Access:</strong> Displayed on the main application page in the "Trending" section.</li>
+                <li><strong>TMDB Direct Fetch:</strong> Trending movies are fetched in real-time directly from TMDB's <code>/trending/movie/{time_window}</code> endpoint.</li>
+                <li><strong>Non-Personalized:</strong> Movie cards in this section do not feature a "Why?" button, as these are general popularity-based recommendations.</li>
+                <li><strong>Interactive Rating:</strong> Users can still rate movies in this section, contributing to their personalized profile.</li>
+            </ol>
+        </div>
+
+        <div class="subsection">
+            <h3>6.5. Dynamic Movie Search</h3>
+            <ol>
+                <li><strong>Search Input:</strong> Users can enter search queries (actor, genre, language) in the dedicated search bar.</li>
+                <li><strong>"New Section" Experience:</strong> Initiating a search dynamically replaces the entire "For You" and "Trending" content on the page with a dedicated "Search Results" section.</li>
+                <li><strong>TMDB Powered:</strong> Search results are fetched from TMDB's <code>/discover/movie</code> or <code>/search/person</code> endpoints.</li>
+                <li><strong>Non-Personalized:</strong> Movie cards in search results do not feature a "Why?" button.</li>
+                <li><strong>"Back to Home" Button:</strong> A prominent button allows users to return to the original homepage content, which is then re-loaded dynamically.</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>7. Technical Details & Design Decisions</h2>
+
+        <div class="subsection">
+            <h3>7.1. LightFM Integration and Robustness</h3>
+            <ul>
+                <li><strong>Hybrid Model:</strong> LightFM combines collaborative filtering with content-based features (implicitly via user-item interactions) for robust recommendations.</li>
+                <li><strong>Training Strategy:</strong> The <code>train_and_save()</code> function handles the creation of the LightFM <code>Dataset</code> and builds the interaction matrix from user ratings. For cold-start scenarios (no user ratings), it can use movie popularity as initial feedback.</li>
+                <li><strong>Deferred Updates:</strong> LightFM model retraining is decoupled from individual user ratings. Ratings are saved instantly, but the model is updated periodically (e.g., via a scheduled background task in a production setup) to maintain performance and avoid "jankiness."</li>
+                <li><strong>Multi-tiered Fallback:</strong> The <code>topn_for_user()</code> function intelligently prioritizes recommendation sources:
+                    <ol>
+                        <li><strong>Primary:</strong> Trained LightFM model.</li>
+                        <li><strong>Fallback 1:</strong> Popularity-based recommendations (from <code>_train_fallback()</code>).</li>
+                        <li><strong>Fallback 2:</strong> Content-based recommendations (from <code>content_based_recommendations()</code> using TF-IDF and cosine similarity).</li>
+                    </ol>
+                    This ensures recommendations are always available, even if the primary model is not yet trained or encounters issues.
+                </li>
+            </ul>
+        </div>
+
+        <div class="subsection">
+            <h3>7.2. LLM Explainability Pipeline</h3>
+            <ul>
+                <li><strong>OpenRouter API:</strong> Integration managed by <code>core/services.py</code>, using the Llama 3.3 70B model.</li>
+                <li><strong>Contextual Prompting:</strong> The LLM prompt is dynamically constructed with rich <code>user_context</code> (liked/disliked movies, rating patterns) and <code>movie_context</code> (title, overview, TMDB data). This grounding is critical for relevant explanations.</li>
+                <li><strong>Length Control:</strong> Prompt engineering and <code>max_tokens=60</code> are used to guide the LLM to generate explanations of exactly 40 words. A post-processing step ensures graceful endings and adherence to the word count, even if the LLM's raw output deviates slightly.</li>
+                <li><strong>Explanation Fallback:</strong> Similar to recommendations, explanations have a robust fallback mechanism:
+                    <ol>
+                        <li><strong>Primary:</strong> LLM-generated explanation.</li>
+                        <li><strong>Fallback 1:</strong> RAG-based explanation (using <code>rag/embeddings.py</code> for semantic content similarity).</li>
+                        <li><strong>Fallback 2:</strong> Simple explanation (based on TMDB rating and popularity).</li>
+                    </ol>
+                    This guarantees that a user always receives an explanation, regardless of LLM API availability or response quality.
+                </li>
+            </ul>
+        </div>
+
+        <div class="subsection">
+            <h3>7.3. Frontend Architecture and Interactivity</h3>
+            <ul>
+                <li><strong>Vanilla JavaScript & Bootstrap 5:</strong> Ensures a lightweight, fast, and responsive user interface.</li>
+                <li><strong>Dynamic DOM Manipulation:</strong> <code>static/app.js</code> actively manages UI elements. The <code>card()</code> function is central to rendering movie cards.</li>
+                <li><strong>Theme Management:</strong> Robust light/dark mode toggle using CSS custom properties and Bootstrap Icons. User preference is persisted via <code>localStorage</code>.</li>
+                <li><strong>AJAX-driven:</strong> All content loading (recommendations, trending, search) and user interactions (ratings, explanations) are asynchronous, providing a smooth single-page application feel.</li>
+                <li><strong>Event Delegation:</strong> Event listeners are efficiently managed, especially when dynamic content is loaded or replaced, to ensure all interactive elements remain functional.</li>
+            </ul>
+        </div>
+    </div>
+
+</body>
+</html>

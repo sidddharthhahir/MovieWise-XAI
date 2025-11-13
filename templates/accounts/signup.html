@@ -1,0 +1,35 @@
+{% extends 'layout.html' %}
+{% block title %}Sign up{% endblock %}
+
+{% block body %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-head">
+      <div class="brand-badge">
+        <span class="brand-icon">🧾</span>
+        <div>
+          <small style="opacity:.9; display:block;">Join us today</small>
+          <h4>Create your account</h4>
+        </div>
+      </div>
+    </div>
+
+    <div class="auth-body">
+      <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <div class="auth-actions mt-3">
+          <button class="btn btn-primary w-100 py-2" type="submit">Sign up</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="auth-footer text-center">
+      <p class="mb-0">
+        Already have an account?
+        <a href="{% url 'login' %}">Log in</a>
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}

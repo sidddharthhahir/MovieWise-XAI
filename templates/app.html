@@ -1,0 +1,78 @@
+{% extends 'layout.html' %}
+{% block title %}MovieWise XAI{% endblock %}
+{% block body %}
+<div class="container py-3">
+  <!-- Search and Discovery Section -->
+  <div class="card p-3 mb-4">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label for="actor" class="form-label">Actor</label>
+        <input id="actor" type="text" class="form-control" placeholder="e.g., Deepika Padukone">
+      </div>
+      <div class="col-md-3">
+        <label for="genre" class="form-label">Genre</label>
+        <input id="genre" type="text" class="form-control" placeholder="e.g., Action">
+      </div>
+      <div class="col-md-3">
+        <label for="lang" class="form-label">Language</label>
+        <input id="lang" type="text" class="form-control" placeholder="e.g., hi or hindi">
+      </div>
+      <div class="col-md-2 text-end">
+        <button id="btnDiscover" class="btn btn-primary w-100">Discover (TMDB)</button>
+      </div>
+    </div>
+    <div class="mt-2 small text-muted">
+      Or try <a href="#" id="btnRag">RAG search</a>
+    </div>
+  </div>
+
+  <!-- Main Content Container -->
+  <div id="mainContent">
+    <!-- For You Section -->
+    <div class="mb-4">
+      <h3 class="mb-3">For You <small class="text-muted">(Personalized)</small></h3>
+      <div id="forYouGrid" class="row g-3">
+        <div class="col-12">
+          <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <div class="mt-2">Loading your personalized recommendations...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trending Section -->
+    <div class="mb-4">
+      <h3 class="mb-3">Trending <small class="text-muted">(Popular Now)</small></h3>
+      <div id="trendingGrid" class="row g-3">
+        <div class="col-12">
+          <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <div class="mt-2">Loading trending movies...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="infoModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modalTitle">Details</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="modalBody">Loading...</div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

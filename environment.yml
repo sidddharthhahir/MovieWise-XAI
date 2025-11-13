@@ -1,0 +1,25 @@
+name: xai-recs-django
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - django>=4.2
+  - djangorestframework
+  - channels
+  - requests
+  - python-dotenv
+  - numpy
+  - scikit-learn
+  - joblib
+  - lightfm
+  - pip
+  - pip:
+    # Packages not readily available on conda-forge, or where pip is preferred
+    # Currently, LightFM is often better installed via pip even in conda
+    # But we want to try conda-forge first for everything else.
+    # We will assume lightfm is available via conda-forge for now, if not,
+    # it can be moved back to pip section.
+    - requests # Ensure requests is handled by conda
+    - python-dotenv # Ensure python-dotenv is handled by conda
+    # No packages left to install via pip after moving to conda-forge where possible

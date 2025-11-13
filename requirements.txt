@@ -1,0 +1,8 @@
+django>=5.0
+djangorestframework
+channels
+requests
+python-dotenv
+numpy
+scikit-learn
+joblib
