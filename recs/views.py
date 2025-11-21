@@ -231,7 +231,12 @@ def rate_movie(request):
 
 @api_view(['GET'])
 def natural_explanation(request):
-    """Generate natural language explanations using OpenRouter LLM"""
+    """
+    Generate natural language explanations using:
+    1. SHAP/LIME from LightFM model
+    2. RAG for context retrieval
+    3. LLM for natural language generation
+    """
     movie_id = request.GET.get('movie_id')
     tmdb_id = request.GET.get('tmdb_id')
     user_id = request.user.id if request.user.is_authenticated else 1
@@ -243,7 +248,6 @@ def natural_explanation(request):
         except Movie.DoesNotExist:
             return Response({"error": "Movie not found"}, status=404)
     elif tmdb_id:
-        # Get movie from TMDB API
         try:
             movie_detail = detail(int(tmdb_id))
             movie = Movie(
@@ -257,80 +261,134 @@ def natural_explanation(request):
     else:
         return Response({"error": "Provide movie_id or tmdb_id"}, status=400)
     
-    # Get user context
+    # ===== STEP 1: Get XAI Explanations (SHAP + LIME + LightFM) =====
+    from .xai_explainer import get_comprehensive_xai_explanation
+    from .lightfm_pipeline import load_artifacts
+    
+    xai_explanation = None
+    try:
+        artifacts = load_artifacts()
+        model = artifacts.get('model') if artifacts.get('mode') == 'lightfm' else None
+        items = artifacts.get('items', [])
+        
+        xai_explanation = get_comprehensive_xai_explanation(
+            user_id=user_id,
+            movie_id=movie.id if movie_id else None,
+            model=model,
+            items=items
+        )
+    except Exception as e:
+        print(f"XAI explanation failed: {e}")
+    
+    # ===== STEP 2: Get RAG Context =====
+    rag_context = ""
+    similar_movies = []
+    try:
+        from rag.embeddings import store
+        query = f"{movie.title} {movie.overview or ''}"
+        hits = store.search(query, k=3)
+        
+        if hits:
+            movie_ids = [i for i, _ in hits]
+            similar_movies_objs = Movie.objects.filter(id__in=movie_ids)
+            similar_movies = [
+                f"{m.title} ({m.vote}/10)" for m in similar_movies_objs
+            ]
+            rag_context = f"Similar movies: {', '.join(similar_movies)}. "
+    except Exception as e:
+        print(f"RAG retrieval failed: {e}")
+    
+    # ===== STEP 3: Build User Context =====
     from core.models import Rating
     user_ratings = Rating.objects.filter(user_id=user_id)
     
-    # Build user context
     user_context = ""
     if user_ratings.exists():
         liked_movies = [r for r in user_ratings if r.value >= 4]
-        disliked_movies = [r for r in user_ratings if r.value <= 2]
-        
-        user_context = f"User has rated {user_ratings.count()} movies total. "
         if liked_movies:
-            liked_titles = [f"{r.movie.title} (rated {r.value}/5)" for r in liked_movies[:5]]
-            user_context += f"They particularly enjoyed: {', '.join(liked_titles)}. "
-        if disliked_movies:
-            disliked_titles = [f"{r.movie.title} (rated {r.value}/5)" for r in disliked_movies[:3]]
-            user_context += f"They didn't like: {', '.join(disliked_titles)}. "
+            liked_titles = [f"{r.movie.title} ({r.value}/5)" for r in liked_movies[:3]]
+            user_context = f"User liked: {', '.join(liked_titles)}. "
     else:
-        user_context = "This is a new user with no rating history yet."
+        user_context = "New user with no rating history. "
     
-    # Build movie context
-    movie_context = f"Movie: '{movie.title}' (Year: {movie.year or 'Unknown'}). "
-    if movie.overview:
-        movie_context += f"Overview: {movie.overview}. "
-    movie_context += f"TMDB Rating: {movie.vote or 'N/A'}/10, Popularity: {movie.popularity or 'N/A'}. "
-    movie_context += f"This movie appeals to viewers who like {movie.overview[:200] if movie.overview else 'quality content'}."
+    # ===== STEP 4: Build Enhanced LLM Prompt with XAI + RAG =====
+    prompt_parts = [
+        f"Movie: '{movie.title}' (Rating: {movie.vote}/10, Popularity: {movie.popularity}).",
+        f"Overview: {movie.overview[:200] if movie.overview else 'N/A'}.",
+        user_context,
+        rag_context
+    ]
     
-    # Try LLM explanation first
+    # Add SHAP values to prompt
+    if xai_explanation and xai_explanation.get('shap_values'):
+        shap = xai_explanation['shap_values']
+        prompt_parts.append(
+            f"Feature importance: Genre ({shap['genre_weight']}), "
+            f"Rating ({shap['rating_weight']}), "
+            f"Popularity ({shap['popularity_weight']}), "
+            f"User preference ({shap['user_preference_weight']})."
+        )
+    
+    # Add LIME explanation to prompt
+    if xai_explanation and xai_explanation.get('lime_explanation'):
+        lime_features = [f"{e['feature']} ({e['impact']})" for e in xai_explanation['lime_explanation'][:2]]
+        prompt_parts.append(f"Key factors: {', '.join(lime_features)}.")
+    
+    full_prompt = " ".join(prompt_parts)
+    full_prompt += " Explain in 40 words why this movie is recommended."
+    
+    # ===== STEP 5: Generate LLM Explanation =====
     try:
         from core.services import openrouter_service
-        explanation = openrouter_service.generate_explanation(user_context, movie_context)
+        print("🔍 Calling LLM with XAI + RAG prompt...")
+        explanation = openrouter_service.generate_explanation(user_context, full_prompt)
+        print("✅ LLM returned:", (explanation[:120] + '...') if isinstance(explanation, str) else explanation)
         
         if explanation:
             return Response({
                 "movie": movie.title,
                 "explanation": explanation,
-                "type": "llm_generated"
+                "type": "llm_with_xai_and_rag",
+                "xai_details": xai_explanation,
+                "similar_movies": similar_movies,
+                "shap_values": xai_explanation.get('shap_values') if xai_explanation else None,
+                "lime_explanation": xai_explanation.get('lime_explanation') if xai_explanation else None
             })
+        else:
+            print("⚠️ LLM returned empty explanation, falling back to RAG")
     except Exception as e:
-        print(f"LLM explanation failed: {str(e)}")
+        print(f"❌ LLM generation failed: {e}")
     
-    # Fallback to RAG explanation
-    try:
-        # Use our existing RAG system for explanation
-        query = f"Why might someone who liked similar movies enjoy {movie.title}?"
-        from rag.embeddings import store
-        hits = store.search(query, k=3)
-        movies = {m.id: m for m in Movie.objects.filter(id__in=[i for i, _ in hits])}
-        context = ' '.join((movies[i].overview or movies[i].title or '') for i, _ in hits)
+    # ===== STEP 6: Fallback to RAG-only explanation =====
+    if rag_context:
+        rag_explanation = f"This movie is similar to {similar_movies[0] if similar_movies else 'highly rated films'}. "
+        if xai_explanation and xai_explanation.get('shap_values'):
+            shap = xai_explanation['shap_values']
+            top_feature = max(shap, key=shap.get)
+            rag_explanation += f"Recommended primarily based on {top_feature.replace('_', ' ')}."
         
-        if context:
-            rag_explanation = f"Based on content similarity, this movie matches your preferences. {context[:200]}..."
-            return Response({
-                "movie": movie.title,
-                "explanation": rag_explanation,
-                "type": "rag_fallback"
-            })
-    except Exception as e:
-        print(f"RAG explanation failed: {str(e)}")
+        return Response({
+            "movie": movie.title,
+            "explanation": rag_explanation,
+            "type": "rag_with_xai_fallback",
+            "xai_details": xai_explanation,
+            "similar_movies": similar_movies
+        })
     
-    # Final fallback to simple explanation
+    # ===== STEP 7: Final Simple Fallback =====
     from django.db.models import Max
     maxp = Movie.objects.aggregate(Max('popularity'))['popularity__max'] or 1.0
     score, reasons = _simple_explain(movie.vote, movie.popularity, maxp)
     
-    simple_explanation = f"This movie has a TMDB rating of {movie.vote or 'N/A'}/10 and is {movie.popularity or 'N/A'} in popularity."
-    if user_ratings.exists():
-        avg_rating = sum([r.value for r in user_ratings]) / len(user_ratings)
-        simple_explanation += f" This matches your average rating pattern of {avg_rating:.1f}/5."
+    simple_explanation = f"Rated {movie.vote or 'N/A'}/10 with popularity {movie.popularity or 'N/A'}."
+    if xai_explanation and xai_explanation.get('combined_score'):
+        simple_explanation += f" XAI confidence score: {xai_explanation['combined_score']:.2f}."
     
     return Response({
         "movie": movie.title,
         "explanation": simple_explanation,
-        "type": "simple_fallback"
+        "type": "simple_with_xai_fallback",
+        "xai_details": xai_explanation
     })
 
 @api_view(['GET'])

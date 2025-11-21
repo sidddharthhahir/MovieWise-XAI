@@ -6,3 +6,5 @@ python-dotenv
 numpy
 scikit-learn
 joblib
+shap>=0.42.0
+lime>=0.2.0.1

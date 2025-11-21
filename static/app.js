@@ -342,49 +342,183 @@ async function discover() {
 async function explainLocal(id) {
   const currentModal = infoModalElem ? new bootstrap.Modal(infoModalElem) : null;
   if (!currentModal || !modalTitle || !modalBody) return;
+
   modalTitle.textContent = 'Why this movie?';
   modalBody.innerHTML = 'Loading personalized explanation...';
   currentModal.show();
-  
-  const res = await fetch(`/api/natural-explanation/?movie_id=${id}`);
-  const j = await res.json();
-  
-  if (j.error) {
-    modalBody.textContent = j.error;
-    return;
-  }
-  
-  modalBody.innerHTML =
-    `<div class="mb-3">
-      <h6 class="mb-2">${j.movie}</h6>
-      <div class="alert alert-info">
-        <p class="mb-0 mt-2">${j.explanation}</p>
+
+  try {
+    const res = await fetch(`/api/natural-explanation/?movie_id=${id}`);
+    const j = await res.json();
+
+    if (j.error) {
+      modalBody.textContent = j.error;
+      return;
+    }
+
+    // --- Build rich HTML with LLM + XAI + RAG info ---
+    let html = '';
+
+    // Source/type label
+    if (j.type) {
+      const typeLabelMap = {
+        'llm_with_xai_and_rag': '🤖 LLM (with XAI + RAG)',
+        'rag_with_xai_fallback': '🔍 RAG-based Explanation',
+        'simple_with_xai_fallback': '📊 Simple Numeric Explanation'
+      };
+      const typeLabel = typeLabelMap[j.type] || j.type;
+      html += `<p class="small text-muted mb-2"><strong>Source:</strong> ${typeLabel}</p>`;
+    }
+
+    // Title + main explanation (LLM or fallback)
+    html += `
+      <div class="mb-3">
+        <h6 class="mb-2">${j.movie}</h6>
+        <div class="alert alert-info">
+          <p class="mb-0 mt-2">${j.explanation}</p>
+        </div>
       </div>
-    </div>`;
+    `;
+
+    // SHAP-like values (if present)
+    const shap = j.shap_values || (j.xai_details && j.xai_details.shap_values);
+    if (shap) {
+      html += `
+        <div class="mb-3">
+          <h6 class="mb-1">🎯 Key factors (XAI - SHAP-like)</h6>
+          <ul class="mb-0 small">
+            <li>Genre weight: <strong>${shap.genre_weight}</strong></li>
+            <li>Rating weight: <strong>${shap.rating_weight}</strong></li>
+            <li>Popularity weight: <strong>${shap.popularity_weight}</strong></li>
+            <li>User preference weight: <strong>${shap.user_preference_weight}</strong></li>
+          </ul>
+        </div>
+      `;
+    }
+
+    // LIME-style explanation (local feature impacts)
+    const lime = j.lime_explanation || (j.xai_details && j.xai_details.lime_explanation);
+    if (Array.isArray(lime) && lime.length > 0) {
+      html += `
+        <div class="mb-3">
+          <h6 class="mb-1">🔬 Local factors (LIME-style)</h6>
+          <ul class="mb-0 small">
+            ${lime.slice(0, 3).map(e => `
+              <li>
+                <strong>${e.feature}</strong>: ${e.value || ''} 
+                <span class="${e.direction === 'negative' ? 'text-danger' : 'text-success'}">
+                  (impact: ${e.impact})
+                </span>
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+      `;
+    }
+
+    // Similar movies considered by RAG
+    if (Array.isArray(j.similar_movies) && j.similar_movies.length > 0) {
+      html += `
+        <div class="mb-2 small text-muted">
+          <strong>📚 Similar movies considered (RAG):</strong> ${j.similar_movies.join(', ')}
+        </div>
+      `;
+    }
+
+    modalBody.innerHTML = html;
+
+  } catch (err) {
+    console.error('Error fetching explanation:', err);
+    modalBody.textContent = 'Failed to load explanation.';
+  }
 }
 
 async function explainTmdb(tmdb_id, title) {
   const currentModal = infoModalElem ? new bootstrap.Modal(infoModalElem) : null;
   if (!currentModal || !modalTitle || !modalBody) return;
+
   modalTitle.textContent = 'Why this movie?';
   modalBody.innerHTML = 'Loading personalized explanation...';
   currentModal.show();
-  
-  const res = await fetch(`/api/natural-explanation/?tmdb_id=${tmdb_id}`);
-  const j = await res.json();
-  
-  if (j.error) {
-    modalBody.textContent = j.error;
-    return;
-  }
-  
-  modalBody.innerHTML =
-    `<div class="mb-3">
-      <h6 class="mb-2">${j.movie || title}</h6>
-      <div class="alert alert-info">
-        <p class="mb-0 mt-2">${j.explanation}</p>
+
+  try {
+    const res = await fetch(`/api/natural-explanation/?tmdb_id=${tmdb_id}`);
+    const j = await res.json();
+
+    if (j.error) {
+      modalBody.textContent = j.error;
+      return;
+    }
+
+    let html = '';
+
+    if (j.type) {
+      const typeLabelMap = {
+        'llm_with_xai_and_rag': '🤖 LLM (with XAI + RAG)',
+        'rag_with_xai_fallback': '🔍 RAG-based Explanation',
+        'simple_with_xai_fallback': '📊 Simple Numeric Explanation'
+      };
+      const typeLabel = typeLabelMap[j.type] || j.type;
+      html += `<p class="small text-muted mb-2"><strong>Source:</strong> ${typeLabel}</p>`;
+    }
+
+    html += `
+      <div class="mb-3">
+        <h6 class="mb-2">${j.movie || title}</h6>
+        <div class="alert alert-info">
+          <p class="mb-0 mt-2">${j.explanation}</p>
+        </div>
       </div>
-    </div>`;
+    `;
+
+    const shap = j.shap_values || (j.xai_details && j.xai_details.shap_values);
+    if (shap) {
+      html += `
+        <div class="mb-3">
+          <h6 class="mb-1">🎯 Key factors (XAI - SHAP-like)</h6>
+          <ul class="mb-0 small">
+            <li>Genre weight: <strong>${shap.genre_weight}</strong></li>
+            <li>Rating weight: <strong>${shap.rating_weight}</strong></li>
+            <li>Popularity weight: <strong>${shap.popularity_weight}</strong></li>
+            <li>User preference weight: <strong>${shap.user_preference_weight}</strong></li>
+          </ul>
+        </div>
+      `;
+    }
+
+    const lime = j.lime_explanation || (j.xai_details && j.xai_details.lime_explanation);
+    if (Array.isArray(lime) && lime.length > 0) {
+      html += `
+        <div class="mb-3">
+          <h6 class="mb-1">🔬 Local factors (LIME-style)</h6>
+          <ul class="mb-0 small">
+            ${lime.slice(0, 3).map(e => `
+              <li>
+                <strong>${e.feature}</strong>: ${e.value || ''} 
+                <span class="${e.direction === 'negative' ? 'text-danger' : 'text-success'}">
+                  (impact: ${e.impact})
+                </span>
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+      `;
+    }
+
+    if (Array.isArray(j.similar_movies) && j.similar_movies.length > 0) {
+      html += `
+        <div class="mb-2 small text-muted">
+          <strong>📚 Similar movies considered (RAG):</strong> ${j.similar_movies.join(', ')}
+        </div>
+      `;
+    }
+
+    modalBody.innerHTML = html;
+
+  } catch (err) {
+    console.error('Error fetching TMDB explanation:', err);
+    modalBody.textContent = 'Failed to load explanation.';
+  }
 }
 
 async function trailer(title) {

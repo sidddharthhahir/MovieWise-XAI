@@ -129,56 +129,58 @@ def topn_for_user(user_id=1, k=12):
     import numpy as np
     artifacts = load_artifacts()
     mode = artifacts.get('mode', 'fallback')
-    
+
+    # LightFM branch
     if mode == 'lightfm' and artifacts.get('model') is not None:
-        # Use LightFM predictions
         try:
             model = artifacts['model']
-            items = artifacts['items']
+            items = artifacts['items']  # list of DB movie IDs
+
             if not items:
-                # No items to recommend
                 return []
-            
-            # Get LightFM predictions for this user
+
+            # Map DB user_id to a stable index (0-based)
+            all_users = list(User.objects.values_list('id', flat=True)) or [1]
+            if user_id not in all_users:
+                # If user not in training set, fallback
+                return content_based_recommendations(user_id, k)
+
+            user_index = all_users.index(user_id)
+
+            # LightFM uses item indices from 0..len(items)-1
+            item_indices = np.arange(len(items))
+
             scores = model.predict(
-                user_ids=np.array([user_id] * len(items)),
-                item_ids=np.arange(len(items))
+                user_ids=np.repeat(user_index, len(items)),
+                item_ids=item_indices
             )
-            
-            # Sort by score and get top k
+
             order = np.argsort(-scores)[:k]
-            chosen = [items[i] for i in order]
-            
-            # Return actual movie objects, ordered by recommendation score
-            movies = list(Movie.objects.filter(id__in=chosen))
-            movies.sort(key=lambda m: chosen.index(m.id))
+            chosen_db_ids = [items[i] for i in order]
+
+            movies = list(Movie.objects.filter(id__in=chosen_db_ids))
+            movies.sort(key=lambda m: chosen_db_ids.index(m.id))
             return movies
-            
+
         except Exception as e:
             print(f"LightFM prediction failed: {e}, falling back to content-based")
-            # Fall through to content-based approach
             return content_based_recommendations(user_id, k)
-    
+
+    # Fallback branch
     elif mode == 'fallback' and artifacts.get('model') is not None:
-        # Use fallback popularity-based recommendations
         try:
             scores = artifacts['model']
             items = artifacts['items']
             if not items:
                 return []
-            
-            # Sort by fallback score
             sorted_items = sorted(items, key=lambda i: scores.get(i, 0), reverse=True)
             chosen = sorted_items[:k]
-            
             movies = list(Movie.objects.filter(id__in=chosen))
             movies.sort(key=lambda m: chosen.index(m.id))
             return movies
-            
         except Exception as e:
             print(f"Fallback prediction failed: {e}, using content-based")
             return content_based_recommendations(user_id, k)
-    
-    # Final fallback to content-based approach
-    return content_based_recommendations(user_id, k)
 
+    # Final fallback
+    return content_based_recommendations(user_id, k)
