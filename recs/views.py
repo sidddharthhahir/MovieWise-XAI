@@ -393,26 +393,30 @@ def natural_explanation(request):
 
 @api_view(['GET'])
 def recommendations(request):
-    from .lightfm_pipeline import topn_for_user
-    from core.models import Rating
-    user_id=request.user.id if request.user.is_authenticated else 1
-    k=int(request.GET.get('k',12))
+    """Get personalized recommendations for the current user"""
+    k = int(request.GET.get('k', 12))
+    user_id = request.user.id if request.user.is_authenticated else 1
     
-    # Check if user has at least 5 ratings for meaningful personalization
-    user_ratings = Rating.objects.filter(user_id=user_id)
-    rating_count = user_ratings.count()
+    from .lightfm_pipeline import topn_for_user, load_artifacts
     
-    if rating_count < 5:
-        return Response({
-            "error": "insufficient_ratings",
-            "message": f"Please rate {5 - rating_count} more movie(s) to get personalized recommendations.",
-            "current_ratings": rating_count,
-            "required_ratings": 5,
-            "action": "rate_more_movies"
+    movies = topn_for_user(user_id, k)
+    
+    # Get the mode to determine source
+    artifacts = load_artifacts()
+    source = artifacts.get('mode', 'content')  # 'lightfm' or 'fallback'
+    
+    recs = []
+    for m in movies:
+        recs.append({
+            "id": m.id,
+            "title": m.title,
+            "poster": m.poster,
+            "vote": m.vote,
+            "year": m.year,
+            "source": source  # NEW: add source
         })
     
-    recs=topn_for_user(user_id=user_id, k=k)
-    return Response(MovieSer(recs, many=True).data)
+    return Response(recs)
 
 @api_view(['GET'])
 def trending(request):
@@ -493,3 +497,55 @@ def get_user_ratings(request):
                 ratings_map[r.movie.tmdb_id] = r.value # Map by tmdb_id for frontend matching
 
     return Response(ratings_map)
+
+@api_view(['GET'])
+def counterfactual_explanation(request):
+    """
+    Explain why a poorly-rated movie is *not* recommended.
+    Uses same XAI components but frames them negatively.
+    """
+    user_id = request.user.id if request.user.is_authenticated else 1
+    from core.models import Rating, Movie
+    from .xai_explainer import get_comprehensive_xai_explanation
+    from .lightfm_pipeline import load_artifacts
+    
+    # Find a low-rated movie by this user
+    low_rating = Rating.objects.filter(user_id=user_id, value__lte=2).order_by('value').first()
+    
+    if not low_rating:
+        return Response({
+            "error": "No low-rated movies found. Rate some movies poorly to see counterfactual explanations."
+        }, status=400)
+    
+    movie = low_rating.movie
+    
+    # Get XAI explanation for this movie
+    artifacts = load_artifacts()
+    model = artifacts.get('model') if artifacts.get('mode') == 'lightfm' else None
+    items = artifacts.get('items', [])
+    
+    explanation = get_comprehensive_xai_explanation(user_id, movie.id, model, items)
+    
+    # Build negative framing
+    shap = explanation.get('shap_values') or {}
+    lime = explanation.get('lime_explanation') or []
+    
+    text = f"You rated '{movie.title}' only {low_rating.value}/5, so the system avoids recommending similar movies. "
+    
+    if shap:
+        # Find the weakest feature
+        weakest_feature = min(shap, key=shap.get)
+        text += f"The '{weakest_feature.replace('_', ' ')}' had low alignment with your preferences ({shap[weakest_feature]:.2f}). "
+    
+    if lime:
+        negative_factors = [e for e in lime if e['direction'] == 'negative']
+        if negative_factors:
+            text += f"Negative factors included: {negative_factors[0]['feature']} (impact: {negative_factors[0]['impact']})."
+    
+    return Response({
+        "movie": movie.title,
+        "rating": low_rating.value,
+        "explanation": text,
+        "type": "counterfactual",
+        "xai_details": explanation
+    })

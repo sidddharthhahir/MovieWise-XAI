@@ -47,6 +47,13 @@ function card(movie, local = false, userRating = 0, showWhyButton = true) {
   
   const poster = movie.poster || 'https://via.placeholder.com/342x513?text=No+Poster';
   
+  // NEW: Source badge (CF vs Content)
+  const sourceBadge = movie.source === 'lightfm'
+    ? '<span class="badge bg-primary ms-2" title="Collaborative Filtering using LightFM">CF</span>'
+    : movie.source === 'fallback' || movie.source === 'content'
+    ? '<span class="badge bg-secondary ms-2" title="Content-based recommendation">Content</span>'
+    : '';
+  
   // Only show "Why?" button if it's a personalized recommendation
   const expBtn = showWhyButton ? (
     local ?
@@ -58,7 +65,10 @@ function card(movie, local = false, userRating = 0, showWhyButton = true) {
     <div class="card card-movie h-100">
       <img src="${poster}" class="poster" alt="${movie.title}"/>
       <div class="p-3 d-flex flex-column">
-        <div class="fw-semibold mb-1 text-truncate" title="${movie.title}">${movie.title}</div>
+        <div class="d-flex align-items-start justify-content-between mb-1">
+          <div class="fw-semibold text-truncate flex-grow-1" title="${movie.title}">${movie.title}</div>
+          ${sourceBadge}
+        </div>
         <div class="small text-muted mb-2">⭐ ${movie.vote ?? '-'} · ${movie.year ?? ''}</div>
         <div class="mt-auto d-flex flex-column gap-2">
           <div class="star-rating" data-movie-id="${movie.id || ''}" data-tmdb-id="${movie.tmdb_id || ''}" data-current-rating="${userRating}">
@@ -138,8 +148,6 @@ function clearStars(container) {
     }
   });
 }
-
-// xaiChips function removed - no longer needed with LLM explanations
 
 async function loadForYou() {
   if (!forYouGrid) return;
@@ -302,8 +310,12 @@ async function discover() {
       if (mainContent) {
         mainContent.innerHTML = homepageContent; // Restore original homepage content
         // Re-initialize event listeners and load data for homepage sections
-        if (forYouGrid) loadForYou();
-        if (trendingGrid) loadTrending();
+        const restoredForYouGrid = document.getElementById('forYouGrid');
+        const restoredTrendingGrid = document.getElementById('trendingGrid');
+        if (restoredForYouGrid && restoredTrendingGrid) {
+          loadForYou();
+          loadTrending();
+        }
         wireButtons(mainContent); // Re-wire buttons for homepage
       }
     };
@@ -416,6 +428,46 @@ async function explainLocal(id) {
       `;
     }
 
+    // === NEW: Confidence score bar ===
+    const combinedScore = j.xai_details && typeof j.xai_details.combined_score === 'number'
+      ? j.xai_details.combined_score
+      : null;
+
+    if (combinedScore !== null) {
+      // Normalize score to 0-100 range (combined_score is typically -1 to 1 or 0 to 1)
+      const normalized = Math.max(-1, Math.min(1, combinedScore)); // Clamp to -1..1
+      const pct = Math.round(((normalized + 1) / 2) * 100); // Map to 0..100
+      
+      let label = 'Medium';
+      let barColor = 'bg-warning';
+      if (pct >= 70) {
+        label = 'High';
+        barColor = 'bg-success';
+      } else if (pct <= 40) {
+        label = 'Low';
+        barColor = 'bg-danger';
+      }
+
+      html += `
+        <div class="mb-3">
+          <h6 class="mb-1">📊 Overall Explanation Confidence</h6>
+          <div class="progress" style="height: 20px;">
+            <div class="progress-bar ${barColor}" 
+                 role="progressbar" 
+                 style="width: ${pct}%;" 
+                 aria-valuenow="${pct}" 
+                 aria-valuemin="0" 
+                 aria-valuemax="100">
+              ${pct}%
+            </div>
+          </div>
+          <p class="small text-muted mt-1 mb-0">
+            Confidence: <strong>${label}</strong> (based on XAI feature importance + RAG similarity)
+          </p>
+        </div>
+      `;
+    }
+
     // Similar movies considered by RAG
     if (Array.isArray(j.similar_movies) && j.similar_movies.length > 0) {
       html += `
@@ -505,6 +557,45 @@ async function explainTmdb(tmdb_id, title) {
       `;
     }
 
+    // === NEW: Confidence score bar ===
+    const combinedScore = j.xai_details && typeof j.xai_details.combined_score === 'number'
+      ? j.xai_details.combined_score
+      : null;
+
+    if (combinedScore !== null) {
+      const normalized = Math.max(-1, Math.min(1, combinedScore));
+      const pct = Math.round(((normalized + 1) / 2) * 100);
+      
+      let label = 'Medium';
+      let barColor = 'bg-warning';
+      if (pct >= 70) {
+        label = 'High';
+        barColor = 'bg-success';
+      } else if (pct <= 40) {
+        label = 'Low';
+        barColor = 'bg-danger';
+      }
+
+      html += `
+        <div class="mb-3">
+          <h6 class="mb-1">📊 Overall Explanation Confidence</h6>
+          <div class="progress" style="height: 20px;">
+            <div class="progress-bar ${barColor}" 
+                 role="progressbar" 
+                 style="width: ${pct}%;" 
+                 aria-valuenow="${pct}" 
+                 aria-valuemin="0" 
+                 aria-valuemax="100">
+              ${pct}%
+            </div>
+          </div>
+          <p class="small text-muted mt-1 mb-0">
+            Confidence: <strong>${label}</strong> (based on XAI feature importance + RAG similarity)
+          </p>
+        </div>
+      `;
+    }
+
     if (Array.isArray(j.similar_movies) && j.similar_movies.length > 0) {
       html += `
         <div class="mb-2 small text-muted">
@@ -541,8 +632,6 @@ async function trailer(title) {
   `;
   currentModal.show();
 }
-
-// Removed retryTrailerSearch function as it's no longer needed.
 
 function wireButtons(container = document) {
   container.querySelectorAll('.btn-expl-local').forEach(btn =>
@@ -609,6 +698,119 @@ function initTheme() {
   }
 }
 
+// === NEW: Counterfactual Explanation ===
+const whyNotBtn = document.getElementById('why-not-btn');
+if (whyNotBtn) {
+  whyNotBtn.addEventListener('click', async () => {
+    const currentModal = infoModalElem ? new bootstrap.Modal(infoModalElem) : null;
+    if (!currentModal || !modalTitle || !modalBody) return;
+
+    modalTitle.textContent = "Why NOT this kind of movie?";
+    modalBody.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><p class="mt-2">Analyzing your least favorite movies...</p></div>';
+    currentModal.show();
+
+    try {
+      const res = await fetch('/api/counterfactual-explanation/');
+      const j = await res.json();
+      
+      if (j.error) {
+        modalBody.innerHTML = `<div class="alert alert-info">${j.error}</div>`;
+        return;
+      }
+
+      let html = `
+        <div class="mb-3">
+          <h6 class="mb-2">${j.movie}</h6>
+          <p class="small text-muted">You rated it: ${j.rating}/5</p>
+          <div class="alert alert-warning">
+            <p class="mb-0">${j.explanation}</p>
+          </div>
+        </div>
+      `;
+
+      // Show SHAP values if available
+      const shap = j.xai_details && j.xai_details.shap_values;
+      if (shap) {
+        html += `
+          <div class="mb-3">
+            <h6 class="mb-1">🎯 Feature Misalignment</h6>
+            <ul class="mb-0 small">
+              <li>Genre weight: <strong>${shap.genre_weight}</strong></li>
+              <li>Rating weight: <strong>${shap.rating_weight}</strong></li>
+              <li>Popularity weight: <strong>${shap.popularity_weight}</strong></li>
+              <li>User preference weight: <strong>${shap.user_preference_weight}</strong></li>
+            </ul>
+          </div>
+        `;
+      }
+
+      modalBody.innerHTML = html;
+
+    } catch (err) {
+      console.error('Counterfactual explanation error:', err);
+      modalBody.innerHTML = '<div class="alert alert-danger">Failed to generate counterfactual explanation.</div>';
+    }
+  });
+}
+
+// === NEW: XAI Info Overlay ===
+const xaiInfoBtn = document.getElementById('xai-info-btn');
+if (xaiInfoBtn) {
+  xaiInfoBtn.addEventListener('click', () => {
+    const currentModal = infoModalElem ? new bootstrap.Modal(infoModalElem) : null;
+    if (!currentModal || !modalTitle || !modalBody) return;
+
+    modalTitle.textContent = "How MovieWise XAI Works";
+    modalBody.innerHTML = `
+      <div class="mb-3">
+        <p class="mb-2">
+          MovieWise XAI combines multiple AI techniques to provide 
+          <strong>transparent, explainable movie recommendations</strong>:
+        </p>
+      </div>
+
+      <div class="mb-3">
+        <h6 class="mb-2">🤖 Recommendation Engine</h6>
+        <ul class="small mb-0">
+          <li><strong>LightFM (Collaborative Filtering):</strong> Learns from user-movie rating patterns using matrix factorization with embeddings.</li>
+          <li><strong>Content-Based Fallback:</strong> Uses TF-IDF similarity on movie plots when collaborative data is sparse.</li>
+        </ul>
+      </div>
+
+      <div class="mb-3">
+        <h6 class="mb-2">🔍 Explainability (XAI) Layer</h6>
+        <ul class="small mb-0">
+          <li><strong>SHAP-like values:</strong> Approximate feature importance (genre, rating, popularity, user preference).</li>
+          <li><strong>LIME-style explanations:</strong> Local feature impacts for individual predictions.</li>
+          <li><strong>LightFM feature extraction:</strong> Embedding contributions from the trained model.</li>
+        </ul>
+      </div>
+
+      <div class="mb-3">
+        <h6 class="mb-2">📚 RAG (Retrieval-Augmented Generation)</h6>
+        <ul class="small mb-0">
+          <li>Retrieves similar movies using TF-IDF vector search over movie plots.</li>
+          <li>Provides grounded context for explanations.</li>
+        </ul>
+      </div>
+
+      <div class="mb-3">
+        <h6 class="mb-2">💬 Natural Language Generation</h6>
+        <ul class="small mb-0">
+          <li><strong>Local LLM (Ollama):</strong> Llama 3.2 model running locally.</li>
+          <li>Converts XAI + RAG signals into personalized, natural language explanations.</li>
+          <li>No external APIs; fully private and offline-capable.</li>
+        </ul>
+      </div>
+
+      <div class="alert alert-info small mb-0">
+        <strong>Privacy:</strong> All processing happens locally. Your ratings and preferences never leave your machine.
+      </div>
+    `;
+    currentModal.show();
+  });
+}
+
 // Event listeners
 const btnDiscover = document.getElementById('btnDiscover');
 if (btnDiscover) {
@@ -642,6 +844,7 @@ if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
 
 // Initialize features safely
 initTheme();
+
 async function fetchUserRatings(ids, idType) {
   if (!ids || ids.length === 0) return {};
   const queryParams = new URLSearchParams();
@@ -658,13 +861,6 @@ async function fetchUserRatings(ids, idType) {
   }
 }
 
-// Initialize features safely
-initTheme();
-// Initial load of homepage content
-if (mainContent) {
-  // We need to re-fetch these elements after homepageContent is restored
-  // So, no direct calls here, they will be called when homepageContent is restored
-}
 // For initial load, if forYouGrid and trendingGrid exist, load them
 if (forYouGrid && trendingGrid) {
   loadForYou();
