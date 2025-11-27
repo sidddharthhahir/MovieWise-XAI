@@ -513,9 +513,10 @@ def counterfactual_explanation(request):
     low_rating = Rating.objects.filter(user_id=user_id, value__lte=2).order_by('value').first()
     
     if not low_rating:
+        # NOTE: Changed status from 400 -> 200
         return Response({
             "error": "No low-rated movies found. Rate some movies poorly to see counterfactual explanations."
-        }, status=400)
+        }, status=200)
     
     movie = low_rating.movie
     
