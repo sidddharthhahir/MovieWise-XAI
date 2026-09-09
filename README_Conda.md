@@ -1,127 +1,75 @@
-# XAI Movie Recommendations System - Conda Setup Guide
+# MovieWise XAI (Conda Setup)
 
-## Quick Start
+A Conda-first setup guide for running MovieWise XAI consistently across environments.
 
-### Method 1: Using the batch script
-```bash
-activate_conda.bat
-python manage.py runserver
-```
+## Project Overview
 
-### Method 2: Manual setup
-```bash
-conda env create -f environment.yml
-conda activate xai-recs-django
-python manage.py migrate
-python manage.py runserver
-```
+This guide provides a clean Conda workflow for creating, activating, and maintaining the MovieWise XAI environment, then running the Django application with the expected dependencies.
 
-## Complete Setup Steps
+## Key Features
 
-### 1. Install Miniconda/Anaconda (if not already installed)
-- Download from: https://conda.io/miniconda.html
-- Add conda to PATH during installation
+- Reproducible environment from `environment.yml`
+- Straightforward setup for local development
+- Standard Django management workflow support
+- Helpful verification and troubleshooting steps
 
-### 2. Environment Setup:
-```bash
-# Create environment from environment.yml
-conda env create -f environment.yml
+## Tech Stack
 
-# Or create manually:
-conda create -n xai-recs-django python=3.10 # Using python 3.10 as per environment.yml
-conda activate xai-recs-django
+- **Runtime:** Python 3.10 (Conda-managed)
+- **Framework:** Django + Django REST Framework
+- **ML/AI:** LightFM and supporting data libraries
+- **Environment Management:** Conda / conda-forge
 
-# Install all packages via conda (prioritizing conda-forge)
-conda env update -f environment.yml --prune
-```
+## Setup & Run
 
-## Environment Management
+1. Create the Conda environment:
+   ```bash
+   conda env create -f environment.yml
+   ```
+2. Activate the environment:
+   ```bash
+   conda activate xai-recs-django
+   ```
+3. Apply migrations:
+   ```bash
+   python manage.py migrate
+   ```
+4. Start the server:
+   ```bash
+   python manage.py runserver
+   ```
 
-### Update Environment:
-```bash
-# After modifying environment.yml
-conda env update -f environment.yml --prune
-```
+## Usage
 
-### Environment Configuration Files:
-
-1. **`environment.yml`** - Primary Conda environment specification
-2. **`activate_conda.bat`** - Windows activation script
-3. **`requirements_conda.txt`** - Alternative pip requirements (not used in this setup)
-4. **`conda_setup.md`** - Detailed documentation (this file)
-
-## Development Workflow
-
-### Starting Development:
-```bash
-conda activate xai-recs-django
-python manage.py runserver
-# Access at: http://localhost:8000
-```
-
-### Key Management Commands:
-```bash
-# Migrate database
-python manage.py migrate
-
-# Create superuser
-python manage.py createsuperuser
-
-# Data ingestion from TMDB
-python manage.py tmdb_ingest --pages=3
-
-# Train recommendation model
-python manage.py train_lightfm
-```
+- Open `http://localhost:8000`
+- Use normal app flows (auth, onboarding, ratings, recommendations)
+- Retrain and ingest data as needed:
+  ```bash
+  python manage.py tmdb_ingest --pages=3
+  python manage.py train_lightfm
+  ```
 
 ## Project Structure
 
-```
-xai_recs_full_v3_2_auth_ui/
-├── environment.yml          # Conda environment specification
-├── activate_conda.bat        # Windows activation script
-├── conda_setup.md             # Detailed setup instructions (this file)
-├── requirements_conda.txt      # Pip-compatible requirements (not used in this setup)
-├── manage.py                   # Django management script
-├── project/                    # Project settings
-├── core/                       # Data models
-├── recs/                       # Recommendation system
-├── rag/                        # RAG search functionality
-├── accounts/                   # User authentication
-├── ui/                         # User interface
-└── static/ & templates/         # Frontend assets
-```
-
-## Benefits of Conda Setup
-
-### ✅ Advantages:
-1. **Better Windows Support**: Pre-compiled binaries optimized for Windows
-2. **Dependency Resolution**: Handles complex package dependencies better than pip
-3. **Conda-Forge Stability**: Packages are thoroughly tested
-4. **Simplified Installation**: All dependencies managed through `environment.yml`.
-5. **Environment Isolation**: Separate from system Python packages
-6. **Production Consistency**: Same environment across development and production
-
-## Troubleshooting
-
-### Common Issues:
-
-1. **Conda not found**: Ensure Miniconda/Anaconda is installed and in PATH
-2. **Package Conflicts**: Use `conda clean --all` and recreate environment if needed
-
-### Verification:
-```bash
-# Test critical imports
-python -c "import django; print('Django OK')"
-python -c "import lightfm; print('LightFM OK')"
+```text
+MovieWise-XAI/
+├── environment.yml
+├── activate_conda.bat
+├── requirements_conda.txt
+├── manage.py
+├── project/
+├── core/
+├── recs/
+├── rag/
+├── accounts/
+├── ui/
+└── static/ + templates/
 ```
 
-## Migration from Virtualenv
+## Contributing
 
-### If currently using .venv:
-1. Deactivate current virtual environment
-2. Recreate environment using `conda env create -f environment.yml`
-3. Verify: `conda list | findstr django`
-```
+Please keep setup instructions aligned with `environment.yml` and open a pull request for documentation improvements.
 
-This Conda environment setup provides a robust foundation for your XAI recommendations system with better dependency management on Windows.
+## License & Contact
+
+Refer to the repository license once published, and use repository issues for questions or support.
