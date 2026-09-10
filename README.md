@@ -1,24 +1,23 @@
 # MovieWise XAI
 
-A Django web app for personalized movie recommendations with explainable AI.
+A Django application for movie discovery, personalized recommendations, and explainable recommendation output.
 
 ## Project Overview
 
-MovieWise XAI combines hybrid recommendation modeling, TMDB-powered discovery, and natural-language explanations to help users understand why movies are recommended. It includes authentication, onboarding, rating flows, and a responsive UI for day-to-day use.
+MovieWise XAI combines TMDB ingestion, recommendation ranking, and explanation endpoints in a single web app. Users can sign up, rate movies, complete onboarding, and request both score-based and natural-language recommendation explanations.
 
 ## Key Features
 
-- Personalized recommendations using LightFM
-- Explainable recommendations with local LLM + RAG
-- TMDB-backed trending and discovery experiences
-- Movie rating workflow that improves recommendations over time
-- User onboarding and authentication
-- Search and trailer access from the main UI
+- Personalized recommendations with a LightFM-first pipeline and a content-based fallback
+- Explainability endpoints with SHAP-like and LIME-like feature signals
+- RAG-style context retrieval over local movie metadata
+- TMDB-backed discovery and trending endpoints
+- User authentication, onboarding flow, and rating capture
 
 ## Tech Stack
 
 - **Backend:** Python 3.10, Django, Django REST Framework
-- **ML/AI:** LightFM, scikit-learn, local LLM via Ollama
+- **ML/AI:** LightFM (optional), scikit-learn, local LLM via Ollama
 - **Frontend:** HTML, CSS, Vanilla JavaScript
 - **Data/API:** TMDB API
 - **Database:** SQLite (default development setup)
@@ -40,7 +39,7 @@ MovieWise XAI combines hybrid recommendation modeling, TMDB-powered discovery, a
    pip install --upgrade pip
    pip install -r requirements.txt
    ```
-4. Configure environment variables in `.env` (for example `TMDB_API_KEY`, `OLLAMA_URL`, `OLLAMA_MODEL`).
+4. Configure environment variables in `.env` (see `.env.example`).
 5. Apply migrations and run the app:
    ```bash
    python manage.py migrate
@@ -52,7 +51,16 @@ MovieWise XAI combines hybrid recommendation modeling, TMDB-powered discovery, a
 - Open `http://localhost:8000`
 - Sign up or log in
 - Complete onboarding by rating movies
-- Explore recommendations, trending content, search, and explanations
+- Explore recommendations, trending content, and explanations
+
+## Optional Data + Model Commands
+
+```bash
+python manage.py tmdb_ingest --pages=3
+python manage.py train_lightfm --epochs=8
+```
+
+LightFM training is optional. If LightFM is unavailable, the app falls back to a content/popularity-based recommender.
 
 ## Project Structure
 
@@ -69,10 +77,7 @@ MovieWise-XAI/
 └── manage.py
 ```
 
-## Contributing
+## Development Notes
 
-Contributions are welcome. Please open an issue to discuss significant changes before submitting a pull request.
-
-## License & Contact
-
-Add your preferred license details in this repository and open an issue for support or collaboration questions.
+- No automated test suite is currently included in the repository.
+- Use `python manage.py check` after configuration changes to validate Django settings.
