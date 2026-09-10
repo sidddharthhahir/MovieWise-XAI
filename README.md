@@ -1,5 +1,7 @@
 # MovieWise XAI
 
+[![checks](https://github.com/sidddharthhahir/MovieWise-XAI/actions/workflows/checks.yml/badge.svg)](https://github.com/sidddharthhahir/MovieWise-XAI/actions/workflows/checks.yml)
+
 A Django application for movie discovery, personalized recommendations, and explainable recommendation output.
 
 ## Project Overview
