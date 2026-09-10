@@ -54,8 +54,8 @@ This guide provides a clean Conda workflow for creating, activating, and maintai
 ```text
 MovieWise-XAI/
 ├── environment.yml
-├── activate_conda.bat
 ├── requirements_conda.txt
+├── conda_setup.md
 ├── manage.py
 ├── project/
 ├── core/
@@ -70,6 +70,6 @@ MovieWise-XAI/
 
 Please keep setup instructions aligned with `environment.yml` and open a pull request for documentation improvements.
 
-## License & Contact
+## Notes
 
-Refer to the repository license once published, and use repository issues for questions or support.
+- LightFM availability can vary by platform; fallback recommendation logic remains available.
