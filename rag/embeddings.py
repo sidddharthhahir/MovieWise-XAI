@@ -1,10 +1,11 @@
-"""
-Enhanced RAG system with proactive context retrieval
-"""
+import logging
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
 from core.models import Movie
-import numpy as np
+
+
+logger = logging.getLogger(__name__)
 
 class Store:
     def __init__(self):
@@ -14,7 +15,7 @@ class Store:
         self.X = None
     
     def build(self):
-        """Build the TF-IDF index from all movies"""
+        """Build the TF-IDF index from all movies."""
         texts = []
         ids = []
         
@@ -24,7 +25,7 @@ class Store:
             ids.append(m.id)
         
         if not texts:
-            print("⚠️ No movies found for RAG indexing")
+            logger.warning("No movies found for RAG indexing")
             return
         
         try:
@@ -32,12 +33,12 @@ class Store:
             self.nn = NearestNeighbors(n_neighbors=min(10, len(texts)), metric='cosine')
             self.nn.fit(self.X)
             self.ids = ids
-            print(f"✅ RAG index built with {len(texts)} movies")
+            logger.info("RAG index built with %s movies", len(texts))
         except Exception as e:
-            print(f"❌ RAG build failed: {e}")
+            logger.exception("RAG index build failed: %s", e)
     
     def search(self, q, k=5):
-        """Search for similar movies using cosine similarity"""
+        """Search for similar movies using cosine similarity."""
         if not self.nn:
             self.build()
         
@@ -49,26 +50,20 @@ class Store:
             dist, idx = self.nn.kneighbors(qv, n_neighbors=min(k, len(self.ids)))
             return [(self.ids[i], 1 - float(d)) for i, d in zip(idx[0], dist[0])]
         except Exception as e:
-            print(f"RAG search failed: {e}")
+            logger.exception("RAG search failed: %s", e)
             return []
     
     def get_context_for_movie(self, movie_id, k=3):
-        """
-        Get contextual information for a specific movie
-        Returns similar movies with their details
-        """
+        """Return similar movies with lightweight metadata."""
         try:
             movie = Movie.objects.get(id=movie_id)
             query = f"{movie.title} {movie.overview or ''}"
-            hits = self.search(query, k=k+1)  # +1 to exclude self
-            
-            # Filter out the movie itself
+            hits = self.search(query, k=k + 1)
             hits = [(mid, score) for mid, score in hits if mid != movie_id][:k]
             
             if not hits:
                 return []
             
-            # Get movie objects
             movie_ids = [mid for mid, _ in hits]
             movies = {m.id: m for m in Movie.objects.filter(id__in=movie_ids)}
             
@@ -85,14 +80,11 @@ class Store:
             
             return context
         except Exception as e:
-            print(f"Context retrieval failed: {e}")
+            logger.exception("Context retrieval failed: %s", e)
             return []
     
     def get_user_preference_context(self, user_id, k=5):
-        """
-        Get RAG context based on user's rating history
-        Returns movies similar to what the user liked
-        """
+        """Return recommendation context from the user's liked movies."""
         try:
             from core.models import Rating
             
@@ -100,7 +92,6 @@ class Store:
             if not user_ratings.exists():
                 return []
             
-            # Build query from liked movies
             liked_movies = [r.movie for r in user_ratings[:5]]
             query_parts = []
             for movie in liked_movies:
@@ -109,7 +100,6 @@ class Store:
             query = " ".join(query_parts)
             hits = self.search(query, k=k)
             
-            # Get movie details
             movie_ids = [mid for mid, _ in hits]
             movies = {m.id: m for m in Movie.objects.filter(id__in=movie_ids)}
             
@@ -125,18 +115,13 @@ class Store:
             
             return context
         except Exception as e:
-            print(f"User preference context failed: {e}")
+            logger.exception("User preference context failed: %s", e)
             return []
 
-# Global store instance
 store = Store()
 
-# Helper function for easy access
 def get_rag_context(movie_id=None, user_id=None, k=3):
-    """
-    Unified function to get RAG context
-    Can be called with movie_id or user_id
-    """
+    """Unified helper for movie or user-driven RAG context."""
     if movie_id:
         return store.get_context_for_movie(movie_id, k=k)
     elif user_id:

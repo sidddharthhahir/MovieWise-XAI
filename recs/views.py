@@ -1,9 +1,14 @@
+import logging
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from core.models import Movie, Rating
-from .serializers import MovieSer, RatingSer
+from .serializers import RatingSer
 from .tmdb import discover, search_person, get_genres, IMG, detail
+
+
+logger = logging.getLogger(__name__)
 
 LANG_ALIASES = {"hindi":"hi","hin":"hi","english":"en","eng":"en","urdu":"ur","turkish":"tr","spanish":"es","german":"de","french":"fr","japanese":"ja","korean":"ko","tamil":"ta","telugu":"te","marathi":"mr","kannada":"kn","bengali":"bn","gujarati":"gu","punjabi":"pa","malayalam":"ml"}
 
@@ -194,19 +199,20 @@ def explain_any(request):
 @api_view(['POST'])
 def rate_movie(request):
     user=request.user if request.user.is_authenticated else None
-    movie_data=request.data.get('movie')  # Can be either local movie ID or TMDB ID
-    value=int(request.data.get('value',5))
-    
-    # Handle TMDB ID (for onboarding) or local movie ID
+    movie_data=request.data.get('movie')
+    try:
+        value = int(request.data.get('value', 5))
+    except (TypeError, ValueError):
+        return Response({"error": "Invalid rating value"}, status=400)
+
+    if not 1 <= value <= 5:
+        return Response({"error": "Rating value must be between 1 and 5"}, status=400)
+
     if isinstance(movie_data, str) and movie_data.isdigit():
-        # This is likely a TMDB ID from onboarding
         tmdb_id = int(movie_data)
-        
-        # Check if movie already exists in our database
         try:
             movie = Movie.objects.get(tmdb_id=tmdb_id)
         except Movie.DoesNotExist:
-            # Get movie details from TMDB and create the movie
             try:
                 movie_detail = detail(tmdb_id)
                 movie = Movie.objects.create(
@@ -220,11 +226,12 @@ def rate_movie(request):
                 )
             except Exception as e:
                 return Response({"error": f"Failed to fetch movie details: {str(e)}"}, status=400)
-        
         movie_id = movie.id
     else:
-        # This is a local movie ID
-        movie_id = int(movie_data)
+        try:
+            movie_id = int(movie_data)
+        except (TypeError, ValueError):
+            return Response({"error": "Invalid movie identifier"}, status=400)
     
     r=Rating.objects.create(user=user, movie_id=movie_id, value=value)
     return Response(RatingSer(r).data)
@@ -261,7 +268,6 @@ def natural_explanation(request):
     else:
         return Response({"error": "Provide movie_id or tmdb_id"}, status=400)
     
-    # ===== STEP 1: Get XAI Explanations (SHAP + LIME + LightFM) =====
     from .xai_explainer import get_comprehensive_xai_explanation
     from .lightfm_pipeline import load_artifacts
     
@@ -278,9 +284,8 @@ def natural_explanation(request):
             items=items
         )
     except Exception as e:
-        print(f"XAI explanation failed: {e}")
-    
-    # ===== STEP 2: Get RAG Context =====
+        logger.exception("XAI explanation generation failed: %s", e)
+
     rag_context = ""
     similar_movies = []
     try:
@@ -296,9 +301,8 @@ def natural_explanation(request):
             ]
             rag_context = f"Similar movies: {', '.join(similar_movies)}. "
     except Exception as e:
-        print(f"RAG retrieval failed: {e}")
-    
-    # ===== STEP 3: Build User Context =====
+        logger.exception("RAG retrieval failed: %s", e)
+
     from core.models import Rating
     user_ratings = Rating.objects.filter(user_id=user_id)
     
@@ -311,7 +315,6 @@ def natural_explanation(request):
     else:
         user_context = "New user with no rating history. "
     
-    # ===== STEP 4: Build Enhanced LLM Prompt with XAI + RAG =====
     prompt_parts = [
         f"Movie: '{movie.title}' (Rating: {movie.vote}/10, Popularity: {movie.popularity}).",
         f"Overview: {movie.overview[:200] if movie.overview else 'N/A'}.",
@@ -319,7 +322,6 @@ def natural_explanation(request):
         rag_context
     ]
     
-    # Add SHAP values to prompt
     if xai_explanation and xai_explanation.get('shap_values'):
         shap = xai_explanation['shap_values']
         prompt_parts.append(
@@ -329,7 +331,6 @@ def natural_explanation(request):
             f"User preference ({shap['user_preference_weight']})."
         )
     
-    # Add LIME explanation to prompt
     if xai_explanation and xai_explanation.get('lime_explanation'):
         lime_features = [f"{e['feature']} ({e['impact']})" for e in xai_explanation['lime_explanation'][:2]]
         prompt_parts.append(f"Key factors: {', '.join(lime_features)}.")
@@ -337,12 +338,9 @@ def natural_explanation(request):
     full_prompt = " ".join(prompt_parts)
     full_prompt += " Explain in 40 words why this movie is recommended."
     
-    # ===== STEP 5: Generate LLM Explanation =====
     try:
         from core.services import openrouter_service
-        print("🔍 Calling LLM with XAI + RAG prompt...")
         explanation = openrouter_service.generate_explanation(user_context, full_prompt)
-        print("✅ LLM returned:", (explanation[:120] + '...') if isinstance(explanation, str) else explanation)
         
         if explanation:
             return Response({
@@ -355,11 +353,10 @@ def natural_explanation(request):
                 "lime_explanation": xai_explanation.get('lime_explanation') if xai_explanation else None
             })
         else:
-            print("⚠️ LLM returned empty explanation, falling back to RAG")
+            logger.warning("LLM returned empty explanation; using fallback response")
     except Exception as e:
-        print(f"❌ LLM generation failed: {e}")
-    
-    # ===== STEP 6: Fallback to RAG-only explanation =====
+        logger.exception("LLM generation failed: %s", e)
+
     if rag_context:
         rag_explanation = f"This movie is similar to {similar_movies[0] if similar_movies else 'highly rated films'}. "
         if xai_explanation and xai_explanation.get('shap_values'):
@@ -375,7 +372,6 @@ def natural_explanation(request):
             "similar_movies": similar_movies
         })
     
-    # ===== STEP 7: Final Simple Fallback =====
     from django.db.models import Max
     maxp = Movie.objects.aggregate(Max('popularity'))['popularity__max'] or 1.0
     score, reasons = _simple_explain(movie.vote, movie.popularity, maxp)
@@ -401,9 +397,8 @@ def recommendations(request):
     
     movies = topn_for_user(user_id, k)
     
-    # Get the mode to determine source
     artifacts = load_artifacts()
-    source = artifacts.get('mode', 'content')  # 'lightfm' or 'fallback'
+    source = artifacts.get('mode', 'content')
     
     recs = []
     for m in movies:
@@ -413,7 +408,7 @@ def recommendations(request):
             "poster": m.poster,
             "vote": m.vote,
             "year": m.year,
-            "source": source  # NEW: add source
+            "source": source
         })
     
     return Response(recs)
@@ -421,15 +416,11 @@ def recommendations(request):
 @api_view(['GET'])
 def trending(request):
     from .tmdb import get_tmdb_trending
-    from .serializers import MovieSer
     k=int(request.GET.get('k',12))
     time_window = request.GET.get('time_window', 'week') # 'day' or 'week'
 
     try:
-        # Fetch trending movies directly from TMDB
         trending_results = get_tmdb_trending(time_window=time_window)
-        # We only need basic movie info for the card display
-        # No need to store them in our DB just for trending display
         out = []
         for i in trending_results[:k]:
             out.append({
@@ -476,10 +467,10 @@ def get_user_ratings(request):
     if not user.is_authenticated:
         return Response({"error": "Authentication required"}, status=401)
 
-    movie_ids = request.GET.getlist('movie_id')  # List of local movie IDs
-    tmdb_ids = request.GET.getlist('tmdb_id')    # List of TMDB IDs
+    movie_ids = request.GET.getlist('movie_id')
+    tmdb_ids = request.GET.getlist('tmdb_id')
 
-    ratings_map = {} # Maps movie.id to rating value
+    ratings_map = {}
 
     if movie_ids:
         ratings = Rating.objects.filter(user=user, movie_id__in=movie_ids).select_related('movie')
@@ -487,14 +478,13 @@ def get_user_ratings(request):
             ratings_map[r.movie.id] = r.value
     
     if tmdb_ids:
-        # Get movies from our DB that match the tmdb_ids
         movies_in_db = Movie.objects.filter(tmdb_id__in=tmdb_ids)
         local_movie_ids_from_tmdb = [m.id for m in movies_in_db]
 
         if local_movie_ids_from_tmdb:
             ratings = Rating.objects.filter(user=user, movie_id__in=local_movie_ids_from_tmdb).select_related('movie')
             for r in ratings:
-                ratings_map[r.movie.tmdb_id] = r.value # Map by tmdb_id for frontend matching
+                ratings_map[r.movie.tmdb_id] = r.value
 
     return Response(ratings_map)
 
@@ -513,7 +503,6 @@ def counterfactual_explanation(request):
     low_rating = Rating.objects.filter(user_id=user_id, value__lte=2).order_by('value').first()
     
     if not low_rating:
-        # NOTE: Changed status from 400 -> 200
         return Response({
             "error": "No low-rated movies found. Rate some movies poorly to see counterfactual explanations."
         }, status=200)
